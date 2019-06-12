@@ -120,12 +120,6 @@ const uint16_t MIN_MESSZ = 893;             // Min number of characters in MQTT 
 
 const uint8_t SENSOR_MAX_MISS = 5;          // Max number of missed sensor reads before deciding it's offline
 
-#ifdef USE_MQTT_TLS
-  const uint16_t WEB_LOG_SIZE = 2000;       // Max number of characters in weblog
-#else
-  const uint16_t WEB_LOG_SIZE = 4000;       // Max number of characters in weblog
-#endif
-
 const uint8_t MAX_BACKLOG = 30;             // Max number of commands in backlog
 const uint32_t MIN_BACKLOG_DELAY = 2;       // Minimal backlog delay in 0.1 seconds
 
@@ -236,7 +230,7 @@ enum ButtonStates { PRESSED, NOT_PRESSED };
 
 enum Shortcuts { SC_CLEAR, SC_DEFAULT, SC_USER };
 
-enum SettingsParmaIndex {P_HOLD_TIME, P_MAX_POWER_RETRY, P_TUYA_DIMMER_ID, P_MDNS_DELAYED_START, P_BOOT_LOOP_OFFSET, P_RGB_REMAP, P_IR_UNKNOW_THRESHOLD, P_MAX_PARAM8};  // Max is PARAM8_SIZE (18) - SetOption32 until SetOption49
+enum SettingsParmaIndex {P_HOLD_TIME, P_MAX_POWER_RETRY, P_TUYA_DIMMER_ID, P_MDNS_DELAYED_START, P_BOOT_LOOP_OFFSET, P_RGB_REMAP, P_IR_UNKNOW_THRESHOLD, P_CSE7766_INVALID_POWER, P_MAX_PARAM8};  // Max is PARAM8_SIZE (18) - SetOption32 until SetOption49
 
 enum DomoticzSensors {DZ_TEMP, DZ_TEMP_HUM, DZ_TEMP_HUM_BARO, DZ_POWER_ENERGY, DZ_ILLUMINANCE, DZ_COUNT, DZ_VOLTAGE, DZ_CURRENT, DZ_AIRQUALITY, DZ_MAX_SENSORS};
 

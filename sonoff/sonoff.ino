@@ -142,6 +142,7 @@ uint8_t backlog_pointer = 0;                // Command backlog pointer
 uint8_t sleep;                              // Current copy of Settings.sleep
 uint8_t blinkspeed = 1;                     // LED blink rate
 uint8_t pin[GPIO_MAX];                      // Possible pin configurations
+uint8_t active_device = 1;                  // Active device in ExecuteCommandPower
 uint8_t leds_present = 0;                   // Max number of LED supported
 uint8_t led_inverted = 0;                   // LED inverted flag (1 = (0 = On, 1 = Off))
 uint8_t led_power = 0;                      // LED power state
@@ -172,6 +173,7 @@ bool i2c_flg = false;                       // I2C configured
 bool spi_flg = false;                       // SPI configured
 bool soft_spi_flg = false;                  // Software SPI configured
 bool ntp_force_sync = false;                // Force NTP sync
+bool ntp_synced_message = false;            // NTP synced message flag
 myio my_module;                             // Active copy of Module GPIOs (17 x 8 bits)
 gpio_flag my_module_flag;                   // Active copy of Template GPIO flags
 StateBitfield global_state;                 // Global states (currently Wifi and Mqtt) (8 bits)
@@ -1193,9 +1195,7 @@ void MqttDataHandler(char* topic, uint8_t* data, unsigned int data_len)
     }
     else if (CMND_SYSLOG == command_code) {
       if ((payload >= LOG_LEVEL_NONE) && (payload <= LOG_LEVEL_ALL)) {
-        Settings.syslog_level = payload;
-        syslog_level = payload;
-        syslog_timer = 0;
+        SetSyslog(payload);
       }
       Response_P(S_JSON_COMMAND_NVALUE_ACTIVE_NVALUE, command, Settings.syslog_level, syslog_level);
     }
@@ -1259,7 +1259,7 @@ void MqttDataHandler(char* topic, uint8_t* data, unsigned int data_len)
         restart_flag = 2;
         Response_P(S_JSON_COMMAND_INDEX_SVALUE, command, index, Settings.sta_pwd[index -1]);
       } else {
-        Response_P(S_JSON_COMMAND_INDEX_ASTERIX, command, index);
+        Response_P(S_JSON_COMMAND_INDEX_ASTERISK, command, index);
       }
     }
     else if (CMND_HOSTNAME == command_code) {
@@ -1667,7 +1667,10 @@ void ExecuteCommandPower(uint8_t device, uint8_t state, int source)
     state &= 1;
     publish_power = 0;
   }
+
   if ((device < 1) || (device > devices_present)) device = 1;
+  active_device = device;
+
   if (device <= MAX_PULSETIMERS) { SetPulseTimer(device -1, 0); }
   power_t mask = 1 << (device -1);        // Device to control
   if (state <= POWER_TOGGLE) {
@@ -1852,8 +1855,13 @@ void PublishStatus(uint8_t payload)
   }
 
   if (((0 == payload) || (6 == payload)) && Settings.flag.mqtt_enabled) {
+#ifdef USE_MQTT_AWS_IOT
+    Response_P(PSTR("{\"" D_CMND_STATUS D_STATUS6_MQTT "\":{\"" D_CMND_MQTTHOST "\":\"%s%s\",\"" D_CMND_MQTTPORT "\":%d,\"" D_CMND_MQTTCLIENT D_JSON_MASK "\":\"%s\",\"" D_CMND_MQTTCLIENT "\":\"%s\",\"" D_JSON_MQTT_COUNT "\":%d,\"MAX_PACKET_SIZE\":%d,\"KEEPALIVE\":%d}}"),
+      Settings.mqtt_user, Settings.mqtt_host, Settings.mqtt_port, Settings.mqtt_client, mqtt_client, MqttConnectCount(), MQTT_MAX_PACKET_SIZE, MQTT_KEEPALIVE);
+#else
     Response_P(PSTR("{\"" D_CMND_STATUS D_STATUS6_MQTT "\":{\"" D_CMND_MQTTHOST "\":\"%s\",\"" D_CMND_MQTTPORT "\":%d,\"" D_CMND_MQTTCLIENT D_JSON_MASK "\":\"%s\",\"" D_CMND_MQTTCLIENT "\":\"%s\",\"" D_CMND_MQTTUSER "\":\"%s\",\"" D_JSON_MQTT_COUNT "\":%d,\"MAX_PACKET_SIZE\":%d,\"KEEPALIVE\":%d}}"),
       Settings.mqtt_host, Settings.mqtt_port, Settings.mqtt_client, mqtt_client, Settings.mqtt_user, MqttConnectCount(), MQTT_MAX_PACKET_SIZE, MQTT_KEEPALIVE);
+#endif
     MqttPublishPrefixTopic_P(option, PSTR(D_CMND_STATUS "6"));
   }
 
@@ -1992,6 +2000,12 @@ bool MqttShowSensor(void)
 void PerformEverySecond(void)
 {
   uptime++;
+
+  if (ntp_synced_message) {
+    // Moved here to fix syslog UDP exception 9 during RtcSecond
+    AddLog_P2(LOG_LEVEL_DEBUG, PSTR(D_LOG_APPLICATION "(" D_UTC_TIME ") %s, (" D_DST_TIME ") %s, (" D_STD_TIME ") %s"), GetTime(0).c_str(), GetTime(2).c_str(), GetTime(3).c_str());
+    ntp_synced_message = false;
+  }
 
   if (BOOT_LOOP_TIME == uptime) {
     RtcReboot.fast_reboot_count = 0;

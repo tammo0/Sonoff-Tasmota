@@ -55,12 +55,23 @@ const char HTTP_HEAD[] PROGMEM =
 
   "<script>"
   "var x=null,lt,to,tp,pc='';"            // x=null allow for abortion
+
+#ifdef USE_JAVASCRIPT_ES6
+// Following bytes saving ES6 syntax fails on old browsers like IE 11 - https://kangax.github.io/compat-table/es6/
+  "eb=s=>document.getElementById(s);"     // Alias to save code space
+  "qs=s=>document.querySelector(s);"      // Alias to save code space
+  "sp=i=>eb(i).type=(eb(i).type==='text'?'password':'text');"  // Toggle password visibility
+#else
   "function eb(s){"
-    "return document.getElementById(s);"  // Save code space
+    "return document.getElementById(s);"  // Alias to save code space
   "}"
   "function qs(s){"                       // Alias to save code space
     "return document.querySelector(s);"
   "}"
+  "function sp(i){"                       // Toggle password visibility
+    "eb(i).type=(eb(i).type==='text'?'password':'text');"
+  "}"
+#endif
 
   // https://www.htmlgoodies.com/beyond/javascript/article.php/3724571/Using-Multiple-JavaScript-Onload-Functions.htm
   "function wl(f){"                       // Execute multiple window.onload
@@ -354,9 +365,9 @@ const char HTTP_FORM_WIFI[] PROGMEM =
   "<fieldset><legend><b>&nbsp;" D_WIFI_PARAMETERS "&nbsp;</b></legend>"
   "<form method='get' action='wi'>"
   "<p><b>" D_AP1_SSID "</b> (" STA_SSID1 ")<br><input id='s1' placeholder='" STA_SSID1 "' value='%s'></p>"
-  "<p><b>" D_AP1_PASSWORD "</b><br><input id='p1' type='password' placeholder='" D_AP1_PASSWORD "' value='" D_ASTERISK_PWD "'></p>"
+  "<p><b>" D_AP1_PASSWORD "</b><input type='checkbox' onclick='sp(\"p1\")'><br><input id='p1' type='password' placeholder='" D_AP1_PASSWORD "' value='" D_ASTERISK_PWD "'></p>"
   "<p><b>" D_AP2_SSID "</b> (" STA_SSID2 ")<br><input id='s2' placeholder='" STA_SSID2 "' value='%s'></p>"
-  "<p><b>" D_AP2_PASSWORD "</b><br><input id='p2' type='password' placeholder='" D_AP2_PASSWORD "' value='" D_ASTERISK_PWD "'></p>"
+  "<p><b>" D_AP2_PASSWORD "</b><input type='checkbox' onclick='sp(\"p2\")'><br><input id='p2' type='password' placeholder='" D_AP2_PASSWORD "' value='" D_ASTERISK_PWD "'></p>"
   "<p><b>" D_HOSTNAME "</b> (%s)<br><input id='h' placeholder='%s' value='%s'></p>";
 
 const char HTTP_FORM_LOG1[] PROGMEM =
@@ -376,7 +387,7 @@ const char HTTP_FORM_OTHER[] PROGMEM =
   "<p><input id='t2' type='checkbox'%s><b>" D_ACTIVATE "</b></p>"
   "</fieldset>"
   "<br>"
-  "<b>" D_WEB_ADMIN_PASSWORD "</b><br><input id='wp' type='password' placeholder='" D_WEB_ADMIN_PASSWORD "' value='" D_ASTERIX "'><br>"
+  "<b>" D_WEB_ADMIN_PASSWORD "</b><input type='checkbox' onclick='sp(\"wp\")'><br><input id='wp' type='password' placeholder='" D_WEB_ADMIN_PASSWORD "' value='" D_ASTERISK_PWD "'><br>"
   "<br>"
   "<input id='b1' type='checkbox'%s><b>" D_MQTT_ENABLE "</b><br>"
   "<br>";
@@ -922,7 +933,9 @@ void HandleRoot(void)
       if ((LST_COLDWARM == (light_type &7)) || (LST_RGBWC == (light_type &7))) {
         WSContentSend_P(HTTP_MSG_SLIDER1, LightGetColorTemp());
       }
-      WSContentSend_P(HTTP_MSG_SLIDER2, Settings.light_dimmer);
+      if (!Settings.flag3.tuya_show_dimmer) {
+        WSContentSend_P(HTTP_MSG_SLIDER2, Settings.light_dimmer);
+      }
     }
     WSContentSend_P(HTTP_TABLE100);
     WSContentSend_P(PSTR("<tr>"));
@@ -1516,13 +1529,11 @@ void LoggingSaveSettings(void)
   char tmp[sizeof(Settings.syslog_host)];  // Max length is currently 33
 
   WebGetArg("l0", tmp, sizeof(tmp));
-  Settings.seriallog_level = (!strlen(tmp)) ? SERIAL_LOG_LEVEL : atoi(tmp);
+  SetSeriallog((!strlen(tmp)) ? SERIAL_LOG_LEVEL : atoi(tmp));
   WebGetArg("l1", tmp, sizeof(tmp));
   Settings.weblog_level = (!strlen(tmp)) ? WEB_LOG_LEVEL : atoi(tmp);
   WebGetArg("l2", tmp, sizeof(tmp));
-  Settings.syslog_level = (!strlen(tmp)) ? SYS_LOG_LEVEL : atoi(tmp);
-  syslog_level = Settings.syslog_level;
-  syslog_timer = 0;
+  SetSyslog((!strlen(tmp)) ? SYS_LOG_LEVEL : atoi(tmp));
   WebGetArg("lh", tmp, sizeof(tmp));
   strlcpy(Settings.syslog_host, (!strlen(tmp)) ? SYS_LOG_HOST : tmp, sizeof(Settings.syslog_host));
   WebGetArg("lp", tmp, sizeof(tmp));
@@ -1759,9 +1770,14 @@ void HandleInformation(void)
   }
   WSContentSend_P(PSTR("}1}2&nbsp;"));  // Empty line
   if (Settings.flag.mqtt_enabled) {
+#ifdef USE_MQTT_AWS_IOT
+    WSContentSend_P(PSTR("}1" D_MQTT_HOST "}2%s%s"), Settings.mqtt_user, Settings.mqtt_host);
+    WSContentSend_P(PSTR("}1" D_MQTT_PORT "}2%d"), Settings.mqtt_port);
+#else
     WSContentSend_P(PSTR("}1" D_MQTT_HOST "}2%s"), Settings.mqtt_host);
     WSContentSend_P(PSTR("}1" D_MQTT_PORT "}2%d"), Settings.mqtt_port);
     WSContentSend_P(PSTR("}1" D_MQTT_USER "}2%s"), Settings.mqtt_user);
+#endif
     WSContentSend_P(PSTR("}1" D_MQTT_CLIENT "}2%s"), mqtt_client);
     WSContentSend_P(PSTR("}1" D_MQTT_TOPIC "}2%s"), Settings.mqtt_topic);
     WSContentSend_P(PSTR("}1" D_MQTT_GROUP_TOPIC "}2%s"), Settings.mqtt_grptopic);
@@ -2440,7 +2456,7 @@ bool WebCommand(void)
       strlcpy(Settings.web_password, (SC_CLEAR == Shortcut(XdrvMailbox.data)) ? "" : (SC_DEFAULT == Shortcut(XdrvMailbox.data)) ? WEB_PASSWORD : XdrvMailbox.data, sizeof(Settings.web_password));
       Response_P(S_JSON_COMMAND_SVALUE, command, Settings.web_password);
     } else {
-      Response_P(S_JSON_COMMAND_ASTERIX, command);
+      Response_P(S_JSON_COMMAND_ASTERISK, command);
     }
   }
   else if (CMND_WEBLOG == command_code) {

@@ -88,7 +88,7 @@
 #define MQTT_USE               1                 // [SetOption3] Select default MQTT use (0 = Off, 1 = On)
 
 #define MQTT_HOST              ""                // [MqttHost]
-#define MQTT_FINGERPRINT1      "A5 02 FF 13 99 9F 8B 39 8E F1 83 4F 11 23 65 0B 32 36 FC 07"  // [MqttFingerprint1]
+#define MQTT_FINGERPRINT1      "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"  // [MqttFingerprint1]
 #define MQTT_FINGERPRINT2      "A5 02 FF 13 99 9F 8B 39 8E F1 83 4F 11 23 65 0B 32 36 FC 07"  // [MqttFingerprint2]
 #define MQTT_PORT              1883              // [MqttPort] MQTT port (10123 on CloudMQTT)
 #define MQTT_USER              "DVES_USER"       // [MqttUser] MQTT user
@@ -262,10 +262,13 @@
 #define USE_HOME_ASSISTANT                       // Enable Home Assistant Discovery Support (+7k code)
   #define HOME_ASSISTANT_DISCOVERY_PREFIX "homeassistant"  // Home Assistant discovery prefix
 
-// -- MQTT - TLS ----------------------------------
-  // !!! TLS uses a LOT OF MEMORY so be careful to enable other options at the same time !!!
-//#define USE_MQTT_TLS                             // Use TLS for MQTT connection (+53k code, +15k mem)
-//  #define USE_MQTT_TLS_CA_CERT                   // Use LetsEncrypt Certificate from sonoff_letsencrypt.h - Not supported with core 2.3.0
+// -- MQTT - TLS - AWS IoT ------------------------
+// Using TLS starting with version v6.5.0.16 compilation will only work using platformio. Arduino IDE will fail.
+//#define USE_MQTT_TLS                             // Use TLS for MQTT connection (+56.7k code, +6.0k mem and +6.6k additional during connection handshake)
+  //#define USE_MQTT_TLS_CA_CERT                   // Force full CA validation instead of fingerprints, uses more memory and slower, but simpler to use
+  //#define USE_MQTT_AWS_IOT                       // Enable MQTT for AWS IoT - requires a private key (+56.7k code, +6.0k mem and +6.6k additional during connection handshake)
+                                                 //   Note: you need to generate a private key + certificate per device and update 'sonoff/sonoff_aws_iot.cpp'
+                                                 //   Full documentation here: https://github.com/arendst/Sonoff-Tasmota/wiki/AWS-IoT
 
 // -- KNX IP Protocol -----------------------------
 //#define USE_KNX                                  // Enable KNX IP Protocol Support (+9.4k code, +3k7 mem)
@@ -275,6 +278,7 @@
 #define USE_WEBSERVER                            // Enable web server and Wifi Manager (+66k code, +8k mem)
   #define WEB_PORT             80                // Web server Port for User and Admin mode
   #define WEB_USERNAME         "admin"           // Web server Admin mode user name
+//  #define USE_JAVASCRIPT_ES6                     // Enable ECMAScript6 syntax using less JavaScript code bytes (fails on IE11)
   #define USE_EMULATION_HUE                      // Enable Hue Bridge emulation for Alexa (+14k code, +2k mem common)
   #define USE_EMULATION_WEMO                     // Enable Belkin WeMo emulation for Alexa (+6k code, +2k mem common)
 
@@ -469,8 +473,8 @@
  * No user configurable items below
 \*********************************************************************************************/
 
-#if defined(USE_MQTT_TLS) && defined(USE_WEBSERVER)
-  #error "Select either USE_MQTT_TLS or USE_WEBSERVER as there is just not enough memory to play with"
+#if defined(USE_DISCOVERY) && defined(USE_MQTT_TLS)
+  #error "Select either USE_DISCOVERY or USE_MQTT_AWS_IOT, mDNS takes too much code space and is not needed for AWS IoT"
 #endif
 
 #endif  // _MY_USER_CONFIG_H_
